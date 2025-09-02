@@ -1,46 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:waterqualitymonitoring/auth.dart';
 
 class HomePage extends StatelessWidget {
-   HomePage({super.key});
-  final User? user = Auth().currentUser;
+  const HomePage({Key? key}) : super(key: key);
 
-  Future<void> signOut() async{
-    await Auth().signOut();
+  Future<void> _logout(BuildContext context) async {
+    await FirebaseAuth.instance.signOut();
+
+    // Redirect to LoginPage
+    Navigator.pushReplacementNamed(context, '/');
   }
 
-  Widget _title(){
-    return const Text('Firebase Auth');
-  }
-
-  //userID
-
-   Widget _userUid(){
-    return Text(user?.email ?? 'User email');
-   }
-
-   Widget _signOutButton(){
-    return ElevatedButton(
-        onPressed: signOut,
-        child:  const Text('Sign Out'),
-    );
-   }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Welcome")),
-      body: Container(
-        height: double.infinity,
-        width: double.infinity,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            _userUid(),
-            _signOutButton(),
-          ],
-        ),
+      appBar: AppBar(
+        title: Text("Home"),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.logout),
+            onPressed: () => _logout(context),
+          ),
+        ],
+      ),
+      body: Center(
+        child: Text("Welcome! You are logged in ✅"),
       ),
     );
   }

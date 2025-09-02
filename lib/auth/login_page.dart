@@ -1,87 +1,42 @@
-// Importing Flutter's Material Design library
-// This gives us access to ready-made widgets like AppBar, TextField, Buttons, etc.
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../auth.dart';
+
 class LoginPage extends StatefulWidget {
   @override
   _LoginPageState createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
-  String? errorMessage = '';
-  bool isLogin = true;
-
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
-  Future<void> signInWithEmailAndPassword() async {
+  String? errorMessage = '';
+
+  /// Login user with Firebase Auth
+  Future<void> loginUser() async {
     try {
-      await Auth().signInwithEmailAndPassword(
-        email: emailController.text,
-        password: passwordController.text,
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+        email: emailController.text.trim(),
+        password: passwordController.text.trim(),
       );
+
+      // Success
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("✅ Login Successful!")),
+      );
+
+      // Navigate to home
+      Navigator.pushReplacementNamed(context, '/home');
     } on FirebaseAuthException catch (e) {
       setState(() {
         errorMessage = e.message;
       });
-    }
-  }
-
-
-  Future<void> createUserWithEmailAndPassword() async {
-    try {
-      await Auth().createUserwithEmailAndPassword(
-        email: emailController.text,
-        password: passwordController.text,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Error: ${e.message}")),
       );
-    } on FirebaseAuthException catch (e) {
-      setState(() {
-        errorMessage = e.message;
-      });
     }
   }
-
-  Widget _title(){
-    return const Text('Firebase Auth');
-  }
-
-  Widget _entryField(
-      String title,
-      TextEditingController controller,
-      )
-  {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: title
-      ),
-    );
-  }
-
-  Widget _errorMessage(){
-    return Text(errorMessage == '' ? '' : 'Hum ? $errorMessage');
-  }
-
-  Widget _submitButton(){
-    return ElevatedButton(
-        onPressed:
-        isLogin ? signInWithEmailAndPassword : createUserWithEmailAndPassword,
-        child: Text(isLogin ? 'Login' : 'Register'),
-    );
-  }
-
-  Widget _loginOrRegisterButton(){
-    return TextButton(
-        onPressed: (){
-          setState(() {
-            isLogin = !isLogin;
-          });
-        }, child: Text(isLogin ? 'Register Insted' : 'Login Insted'),
-    );
-  }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -94,25 +49,26 @@ class _LoginPageState extends State<LoginPage> {
             TextField(
               controller: emailController,
               decoration: InputDecoration(labelText: "Email"),
+              keyboardType: TextInputType.emailAddress,
             ),
             TextField(
               controller: passwordController,
               decoration: InputDecoration(labelText: "Password"),
               obscureText: true,
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: signInWithEmailAndPassword, // Call login
+              onPressed: loginUser,
               child: Text("Login"),
             ),
-            if (errorMessage?.isNotEmpty ?? false)
-              Text(errorMessage!, style: TextStyle(color: Colors.red)),
-            TextButton(
-              onPressed: () {
-                Navigator.pushNamed(context, '/signup');
-              },
-              child: Text("Don’t have an account? Sign up"),
-            ),
+            if (errorMessage != null && errorMessage!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(
+                  errorMessage!,
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
           ],
         ),
       ),
