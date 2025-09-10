@@ -31,7 +31,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+              'you can reconfigure this by running the FlutterFire CLI again.',
         );
       default:
         throw UnsupportedError(
@@ -46,7 +46,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '943850444661',
     projectId: 'water-qualitymonitoring',
     authDomain: 'water-qualitymonitoring.firebaseapp.com',
-    storageBucket: 'water-qualitymonitoring.firebasestorage.app',
+    storageBucket: 'water-qualitymonitoring.appspot.com', // ✅ fixed
     measurementId: 'G-5BJ91FF1DM',
   );
 
@@ -55,7 +55,7 @@ class DefaultFirebaseOptions {
     appId: '1:943850444661:android:8d965aace2d1f9c13d653c',
     messagingSenderId: '943850444661',
     projectId: 'water-qualitymonitoring',
-    storageBucket: 'water-qualitymonitoring.firebasestorage.app',
+    storageBucket: 'water-qualitymonitoring.appspot.com', // ✅ fixed
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
@@ -63,7 +63,7 @@ class DefaultFirebaseOptions {
     appId: '1:943850444661:ios:7e27f0f372df5bac3d653c',
     messagingSenderId: '943850444661',
     projectId: 'water-qualitymonitoring',
-    storageBucket: 'water-qualitymonitoring.firebasestorage.app',
+    storageBucket: 'water-qualitymonitoring.appspot.com', // ✅ fixed
     iosBundleId: 'com.example.waterqualitymonitoring',
   );
 
@@ -72,7 +72,7 @@ class DefaultFirebaseOptions {
     appId: '1:943850444661:ios:7e27f0f372df5bac3d653c',
     messagingSenderId: '943850444661',
     projectId: 'water-qualitymonitoring',
-    storageBucket: 'water-qualitymonitoring.firebasestorage.app',
+    storageBucket: 'water-qualitymonitoring.appspot.com', // ✅ fixed
     iosBundleId: 'com.example.waterqualitymonitoring',
   );
 
@@ -82,7 +82,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '943850444661',
     projectId: 'water-qualitymonitoring',
     authDomain: 'water-qualitymonitoring.firebaseapp.com',
-    storageBucket: 'water-qualitymonitoring.firebasestorage.app',
+    storageBucket: 'water-qualitymonitoring.appspot.com', // ✅ fixed
     measurementId: 'G-0M6SCEK7JE',
   );
 }
