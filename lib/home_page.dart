@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({Key? key}) : super(key: key);
+  const HomePage({super.key});
 
   @override
   _HomePageState createState() => _HomePageState();
@@ -12,27 +12,37 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String? role;
   String? email;
+  String? name;
+  String? gender;
 
   @override
   void initState() {
     super.initState();
-    _getUserRole();
+    _getUserData();
   }
 
-  /// Fetch current user's role from Firestore
-  Future<void> _getUserRole() async {
+  /// Fetch role from Users collection & profile from infouser
+  Future<void> _getUserData() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    final doc =
+    final userDoc =
     await FirebaseFirestore.instance.collection("Users").doc(uid).get();
 
-    if (doc.exists) {
-      setState(() {
-        role = doc['role'];
-        email = doc['email'];
-      });
+    if (userDoc.exists) {
+      role = userDoc['role'];
+      email = userDoc['email'];
     }
+
+    final infoDoc =
+    await FirebaseFirestore.instance.collection("infouser").doc(uid).get();
+
+    if (infoDoc.exists) {
+      name = infoDoc['name'];
+      gender = infoDoc['gender'];
+    }
+
+    setState(() {});
   }
 
   Future<void> _logout(BuildContext context) async {
@@ -40,9 +50,82 @@ class _HomePageState extends State<HomePage> {
     Navigator.pushReplacementNamed(context, '/');
   }
 
+  void _editProfile() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    // Default name = part before @ if empty
+    String defaultName = name ?? (email != null ? email!.split("@")[0] : "");
+
+    TextEditingController nameController =
+    TextEditingController(text: defaultName);
+    String selectedGender = gender ?? "Other";
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Edit Profile"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Email field (read-only)
+              TextField(
+                readOnly: true,
+                decoration: InputDecoration(
+                  labelText: "Email",
+                  hintText: email,
+                ),
+              ),
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(labelText: "Name"),
+              ),
+              DropdownButtonFormField<String>(
+                value: selectedGender,
+                items: ["Male", "Female", "Other"]
+                    .map((g) => DropdownMenuItem(
+                  value: g,
+                  child: Text(g),
+                ))
+                    .toList(),
+                onChanged: (val) {
+                  if (val != null) selectedGender = val;
+                },
+                decoration: InputDecoration(labelText: "Gender"),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await FirebaseFirestore.instance
+                    .collection("infouser")
+                    .doc(uid)
+                    .set({
+                  "email": email,
+                  "name": nameController.text.trim(),
+                  "gender": selectedGender,
+                }, SetOptions(merge: true));
+
+                Navigator.pop(context);
+                _getUserData(); // Refresh UI
+              },
+              child: Text("Save"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (role == null) {
+    if (role == null || email == null) {
       return Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
@@ -51,19 +134,52 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text("Dashboard"),
+        backgroundColor: Colors.blueGrey,
         actions: [
           IconButton(
-            icon: Icon(Icons.logout),
-            tooltip: "Logout",
-            onPressed: () => _logout(context),
+            icon: Icon(Icons.edit),
+            tooltip: "Edit Profile",
+            onPressed: _editProfile,
           ),
         ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: role == "admin"
-            ? _buildAdminScreen()
-            : _buildAnalystScreen(),
+        child: role == "admin" ? _buildAdminScreen() : _buildAnalystScreen(),
+      ),
+
+      // --- Bottom Navigation Bar ---
+      bottomNavigationBar: BottomAppBar(
+        color: Colors.blueGrey.shade100,
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 6.0,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            // Left button - Create Report
+            IconButton(
+              icon: const Icon(Icons.add_chart, color: Colors.blueGrey),
+              onPressed: () {
+                Navigator.pushNamed(context, "/create_report");
+              },
+            ),
+
+            // Middle button - Home
+            IconButton(
+              icon: const Icon(Icons.home, color: Colors.blueGrey),
+              onPressed: () {
+                // refresh same page
+                Navigator.pushReplacementNamed(context, "/home");
+              },
+            ),
+
+            // Right button - Logout
+            IconButton(
+              icon: const Icon(Icons.logout, color: Colors.redAccent),
+              onPressed: () => _logout(context),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -75,33 +191,29 @@ class _HomePageState extends State<HomePage> {
       children: [
         Icon(Icons.analytics_outlined, size: 70, color: Colors.blueGrey),
         SizedBox(height: 20),
-        Text(
-          "Analyst Dashboard",
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-        ),
+        Text("Analyst Dashboard",
+            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
         SizedBox(height: 10),
-        Text(
-          "Welcome, $email",
-          style: TextStyle(fontSize: 16, color: Colors.grey[700]),
-        ),
+        Text("Welcome, $email",
+            style: TextStyle(fontSize: 16, color: Colors.grey[700])),
+        if (name != null) Text("Name: $name"),
+        if (gender != null) Text("Gender: $gender"),
       ],
     );
   }
 
-  /// Admin screen: list of analysts
+  /// Admin screen
   Widget _buildAdminScreen() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          "Admin Dashboard",
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-        ),
+        Text("Admin Dashboard",
+            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
         SizedBox(height: 10),
-        Text(
-          "Logged in as: $email",
-          style: TextStyle(fontSize: 16, color: Colors.grey[700]),
-        ),
+        Text("Logged in as: $email",
+            style: TextStyle(fontSize: 16, color: Colors.grey[700])),
+        if (name != null) Text("Name: $name"),
+        if (gender != null) Text("Gender: $gender"),
         SizedBox(height: 20),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
@@ -118,10 +230,8 @@ class _HomePageState extends State<HomePage> {
 
               if (analysts.isEmpty) {
                 return Center(
-                    child: Text(
-                      "No analysts registered yet.",
-                      style: TextStyle(color: Colors.grey, fontSize: 16),
-                    ));
+                    child: Text("No analysts registered yet.",
+                        style: TextStyle(color: Colors.grey, fontSize: 16)));
               }
 
               return ListView.builder(
@@ -139,14 +249,10 @@ class _HomePageState extends State<HomePage> {
                         backgroundColor: Colors.blueGrey,
                         child: Icon(Icons.person, color: Colors.white),
                       ),
-                      title: Text(
-                        analyst['email'],
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text(
-                        "Role: ${analyst['role']}",
-                        style: TextStyle(color: Colors.black54),
-                      ),
+                      title: Text(analyst['email'],
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text("Role: ${analyst['role']}",
+                          style: TextStyle(color: Colors.black54)),
                     ),
                   );
                 },

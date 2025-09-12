@@ -4,7 +4,7 @@ import 'package:waterqualitymonitoring/auth/login_page.dart';
 import 'package:flutter/material.dart';
 
 class WidgetTree extends StatefulWidget{
-  const WidgetTree({Key? key}) : super(key: key);
+  const WidgetTree({super.key});
   
   @override
   State<WidgetTree> createState()=> _WidgetTreeState();

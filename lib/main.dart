@@ -7,6 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dashboards/analyst_dashboard.dart';
 import 'dashboards/admin_dashboard.dart';
+import 'dashboards/create_report.dart';
+import 'dashboards/approve_report.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,6 +78,8 @@ Future<void> _ensureAdminExists() async {
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -89,6 +93,8 @@ class MyApp extends StatelessWidget {
         '/home': (context) => HomePage(),
         '/analyst': (context) => AnalystDashboard(),
         '/admin': (context) => AdminDashboard(),
+        '/create_report': (context) => CreateReportPage(),
+        '/approve_report': (context) => ApproveReportPage(),
       },
     );
   }
