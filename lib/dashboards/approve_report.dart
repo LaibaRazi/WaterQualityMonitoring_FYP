@@ -13,14 +13,11 @@ class _ApproveReportPageState extends State<ApproveReportPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  int _currentIndex = 1; // Reports page
+  int _currentIndex = 1;
 
-  /// 🔹 Update report status
   Future<void> _updateStatus(String docId, String status) async {
     try {
-      await _firestore.collection("Reports").doc(docId).update({
-        "status": status,
-      });
+      await _firestore.collection("Reports").doc(docId).update({"status": status});
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Status updated to $status ✅")),
       );
@@ -32,7 +29,6 @@ class _ApproveReportPageState extends State<ApproveReportPage> {
     }
   }
 
-  /// 🔹 Show dialog to choose new status
   void _showEditDialog(String docId, String currentStatus) {
     showDialog(
       context: context,
@@ -70,7 +66,6 @@ class _ApproveReportPageState extends State<ApproveReportPage> {
     );
   }
 
-  /// 🔹 Bottom navigation actions
   void _onNavBarTapped(int index) {
     setState(() {
       _currentIndex = index;
@@ -81,7 +76,6 @@ class _ApproveReportPageState extends State<ApproveReportPage> {
         Navigator.pushReplacementNamed(context, '/admin');
         break;
       case 1:
-      // Already on approve_report
         break;
       case 2:
         _logout();
@@ -89,11 +83,22 @@ class _ApproveReportPageState extends State<ApproveReportPage> {
     }
   }
 
-  /// 🔹 Logout
   Future<void> _logout() async {
     await _auth.signOut();
     if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/');
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case "approved":
+        return Colors.green;
+      case "pendingAnalysis":
+        return Colors.orange;
+      case "pending":
+      default:
+        return Colors.red;
+    }
   }
 
   @override
@@ -101,7 +106,8 @@ class _ApproveReportPageState extends State<ApproveReportPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Approve Reports"),
-        backgroundColor: Colors.blue,
+        backgroundColor: Colors.blueAccent,
+        elevation: 0,
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: _firestore
@@ -120,32 +126,67 @@ class _ApproveReportPageState extends State<ApproveReportPage> {
           final reports = snapshot.data!.docs;
 
           return ListView.builder(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             itemCount: reports.length,
             itemBuilder: (context, index) {
               final report = reports[index];
               final createdAt = (report['createdAt'] as Timestamp?)?.toDate();
-              final dateString =
-              createdAt != null ? "${createdAt.toLocal()}" : "Unknown Date";
+              final dateString = createdAt != null
+                  ? "${createdAt.toLocal().toString().split('.')[0]}"
+                  : "Unknown Date";
+
+              final status = report['status'] ?? "pending";
 
               return Card(
                 margin: const EdgeInsets.symmetric(vertical: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                elevation: 4,
+                shadowColor: Colors.grey.withOpacity(0.3),
                 child: ListTile(
-                  // ✅ Use 'analysis' instead of 'title'
-                  title: Text(report['analysis'] ?? "Water Sample - Test"),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                          "Contamination: ${report['contaminationLevel'] ?? 'Unknown'}"),
-                      Text("Status: ${report['status'] ?? 'pending'}"),
-                      Text("Created At: $dateString"),
-                    ],
+                  contentPadding:
+                  const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  title: Text(
+                    report['analysis'] ?? "Water Sample - Test",
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 6.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Contamination: ${report['contaminationLevel'] ?? 'Unknown'}",
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Text("Status: "),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _statusColor(status).withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                status,
+                                style: TextStyle(
+                                    color: _statusColor(status),
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text("Created At: $dateString"),
+                      ],
+                    ),
                   ),
                   trailing: IconButton(
-                    icon: const Icon(Icons.edit, color: Colors.blue),
-                    onPressed: () =>
-                        _showEditDialog(report.id, report['status'] ?? 'pending'),
+                    icon: const Icon(Icons.edit, color: Colors.blueAccent),
+                    onPressed: () => _showEditDialog(report.id, status),
                   ),
                 ),
               );
@@ -156,6 +197,8 @@ class _ApproveReportPageState extends State<ApproveReportPage> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: _onNavBarTapped,
+        selectedItemColor: Colors.blueAccent,
+        unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home),

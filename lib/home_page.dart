@@ -54,9 +54,7 @@ class _HomePageState extends State<HomePage> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    // Default name = part before @ if empty
     String defaultName = name ?? (email != null ? email!.split("@")[0] : "");
-
     TextEditingController nameController =
     TextEditingController(text: defaultName);
     String selectedGender = gender ?? "Other";
@@ -69,7 +67,6 @@ class _HomePageState extends State<HomePage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Email field (read-only)
               TextField(
                 readOnly: true,
                 decoration: InputDecoration(
@@ -113,7 +110,7 @@ class _HomePageState extends State<HomePage> {
                 }, SetOptions(merge: true));
 
                 Navigator.pop(context);
-                _getUserData(); // Refresh UI
+                _getUserData();
               },
               child: Text("Save"),
             ),
@@ -134,7 +131,7 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text("Dashboard"),
-        backgroundColor: Colors.blueGrey,
+        backgroundColor: Colors.blueAccent,
         actions: [
           IconButton(
             icon: Icon(Icons.edit),
@@ -148,48 +145,58 @@ class _HomePageState extends State<HomePage> {
         child: role == "admin" ? _buildAdminScreen() : _buildAnalystScreen(),
       ),
 
-      // --- Bottom Navigation Bar ---
+      // --- Modern Bottom Navigation Bar ---
       bottomNavigationBar: BottomAppBar(
-        color: Colors.blueGrey.shade100,
+        color: Colors.blueGrey.shade50,
         shape: const CircularNotchedRectangle(),
         notchMargin: 6.0,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            // Left button - Create Report
-            IconButton(
-              icon: const Icon(Icons.add_chart, color: Colors.blueGrey),
-              onPressed: () {
-                Navigator.pushNamed(context, "/create_report");
-              },
-            ),
+        elevation: 6,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              // Left button - Create Report
+              IconButton(
+                icon: const Icon(Icons.add_chart, color: Colors.blueAccent),
+                onPressed: () {
+                  Navigator.pushNamed(context, "/create_report");
+                },
+              ),
 
-            // Middle button - Home
-            IconButton(
-              icon: const Icon(Icons.home, color: Colors.blueGrey),
-              onPressed: () {
-                // refresh same page
-                Navigator.pushReplacementNamed(context, "/home");
-              },
-            ),
+              // Middle button - Analyst Dashboard
+              IconButton(
+                icon: const Icon(Icons.analytics, color: Colors.blueAccent),
+                onPressed: () {
+                  Navigator.pushReplacementNamed(context, "/analyst");
+                },
+              ),
 
-            // Right button - Logout
-            IconButton(
-              icon: const Icon(Icons.logout, color: Colors.redAccent),
-              onPressed: () => _logout(context),
-            ),
-          ],
+              // Right button - Home
+              IconButton(
+                icon: const Icon(Icons.home, color: Colors.blueAccent),
+                onPressed: () {
+                  Navigator.pushReplacementNamed(context, "/home");
+                },
+              ),
+
+              // Right-most button - Logout
+              IconButton(
+                icon: const Icon(Icons.logout, color: Colors.redAccent),
+                onPressed: () => _logout(context),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  /// Analyst screen
   Widget _buildAnalystScreen() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.analytics_outlined, size: 70, color: Colors.blueGrey),
+        Icon(Icons.analytics_outlined, size: 70, color: Colors.blueAccent),
         SizedBox(height: 20),
         Text("Analyst Dashboard",
             style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
@@ -202,7 +209,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// Admin screen
   Widget _buildAdminScreen() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -246,7 +252,7 @@ class _HomePageState extends State<HomePage> {
                     margin: EdgeInsets.symmetric(vertical: 8),
                     child: ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: Colors.blueGrey,
+                        backgroundColor: Colors.blueAccent,
                         child: Icon(Icons.person, color: Colors.white),
                       ),
                       title: Text(analyst['email'],
