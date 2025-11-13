@@ -31,7 +31,7 @@ class _LoginPageState extends State<LoginPage> {
 
       // Get role from Firestore
       final doc = await FirebaseFirestore.instance
-          .collection("Users")
+          .collection("users")
           .doc(userCredential.user!.uid)
           .get();
 
