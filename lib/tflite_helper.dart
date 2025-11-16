@@ -8,7 +8,7 @@ class WaterQualityModel {
   /// Async factory constructor to initialize interpreter
   static Future<WaterQualityModel> create() async {
     final model = WaterQualityModel._();
-    model._interpreter = await Interpreter.fromAsset('assets/water_quality_model.tflite');
+    model._interpreter = await Interpreter.fromAsset('assets/water_model.tflite');
     return model;
   }
 

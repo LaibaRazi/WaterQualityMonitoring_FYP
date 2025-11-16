@@ -35,7 +35,7 @@ class _HomePageState extends State<HomePage> {
     }
 
     final infoDoc =
-    await FirebaseFirestore.instance.collection("infouser").doc(uid).get();
+    await FirebaseFirestore.instance.collection("User").doc(uid).get();
 
     if (infoDoc.exists) {
       name = infoDoc['name'];
@@ -101,7 +101,7 @@ class _HomePageState extends State<HomePage> {
             ElevatedButton(
               onPressed: () async {
                 await FirebaseFirestore.instance
-                    .collection("infouser")
+                    .collection("User")
                     .doc(uid)
                     .set({
                   "email": email,
@@ -260,6 +260,7 @@ class _HomePageState extends State<HomePage> {
                       subtitle: Text("Role: ${analyst['role']}",
                           style: TextStyle(color: Colors.black54)),
                     ),
+
                   );
                 },
               );

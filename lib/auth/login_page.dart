@@ -13,6 +13,53 @@ class _LoginPageState extends State<LoginPage> {
 
   String? errorMessage;
 
+  /// Create default admin if not exists
+  Future<void> createDefaultAdminIfNotExists() async {
+    try {
+      // Check Users collection for admin role
+      final adminCheck = await FirebaseFirestore.instance
+          .collection('Users')
+          .where('role', isEqualTo: 'admin')
+          .limit(1)
+          .get();
+
+      if (adminCheck.docs.isNotEmpty) {
+        return; // Admin already exists
+      }
+
+      UserCredential? adminCredential;
+
+      // Try sign-in for admin (in case account exists only in Auth)
+      try {
+        adminCredential = await FirebaseAuth.instance
+            .signInWithEmailAndPassword(
+          email: 'admin@gmail.com',
+          password: 'admin123',
+        );
+      } catch (e) {
+        // If sign-in fails, create admin account
+        adminCredential = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(
+          email: 'admin@gmail.com',
+          password: 'admin123',
+        );
+      }
+
+      final adminUid = adminCredential.user!.uid;
+
+      // Save admin info in Firestore
+      await FirebaseFirestore.instance.collection('Users').doc(adminUid).set({
+        'email': 'admin@gmail.com',
+        'fullName': 'Admin',
+        'role': 'admin',
+        'status': 'active',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print("Admin creation error: $e");
+    }
+  }
+
   /// Login user with Firebase Auth and redirect by role
   Future<void> loginUser() async {
     try {
@@ -31,7 +78,7 @@ class _LoginPageState extends State<LoginPage> {
 
       // Get role from Firestore
       final doc = await FirebaseFirestore.instance
-          .collection("users")
+          .collection("Users")
           .doc(userCredential.user!.uid)
           .get();
 
@@ -149,11 +196,12 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 12),
 
-                  /// Signup Redirect
+                  /// Create Account + Auto Admin Setup
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
-                      onPressed: () {
+                      onPressed: () async {
+                        await createDefaultAdminIfNotExists();
                         Navigator.pushReplacementNamed(context, '/signup');
                       },
                       style: OutlinedButton.styleFrom(
