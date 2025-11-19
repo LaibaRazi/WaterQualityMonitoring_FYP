@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart'; // For formatting timestamps
+import 'package:intl/intl.dart';
 
 class AnalystDashboard extends StatefulWidget {
   const AnalystDashboard({super.key});
@@ -28,6 +28,7 @@ class _AnalystDashboardState extends State<AnalystDashboard> {
     Navigator.pushReplacementNamed(context, "/");
   }
 
+  /// COLORS FOR STATUS
   Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case "approved":
@@ -40,6 +41,68 @@ class _AnalystDashboardState extends State<AnalystDashboard> {
     }
   }
 
+  /// EDIT NOTES DIALOG
+  void _editNotesDialog(String docId, String currentNotes) {
+    TextEditingController notesController =
+    TextEditingController(text: currentNotes);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Edit Notes"),
+        content: TextField(
+          controller: notesController,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: "Update your notes...",
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              await _firestore.collection("Reports").doc(docId).update({
+                "notes": notesController.text.trim(),
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Notes updated")));
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// DELETE REPORT CONFIRMATION
+  void _deleteReport(String docId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Report"),
+        content: const Text("Are you sure you want to delete this report?"),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              await _firestore.collection("Reports").doc(docId).delete();
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Report deleted")));
+            },
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final userEmail = _user?.email?.trim().toLowerCase() ?? "";
@@ -49,6 +112,7 @@ class _AnalystDashboardState extends State<AnalystDashboard> {
         title: const Text("Analyst Dashboard"),
         backgroundColor: Colors.blueAccent,
       ),
+
       body: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
@@ -56,9 +120,10 @@ class _AnalystDashboardState extends State<AnalystDashboard> {
             const Text(
               "Your Reports",
               style: TextStyle(
-                  fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+                  fontSize: 22, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
+
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: _firestore
@@ -69,91 +134,70 @@ class _AnalystDashboardState extends State<AnalystDashboard> {
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return Center(
-                      child: Text(
-                        "Error loading reports.\n${snapshot.error}",
-                        textAlign: TextAlign.center,
-                      ),
+                      child: Text("Error: ${snapshot.error}"),
                     );
                   }
 
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+                  if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  final reports = snapshot.data?.docs ?? [];
+                  final reports = snapshot.data!.docs;
 
                   if (reports.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.report, size: 60, color: Colors.grey),
-                          SizedBox(height: 12),
-                          Text(
-                            "No reports submitted yet.",
-                            style: TextStyle(fontSize: 16, color: Colors.grey),
-                          ),
-                        ],
+                    return const Center(
+                      child: Text(
+                        "No reports found",
+                        style: TextStyle(color: Colors.grey),
                       ),
                     );
                   }
 
                   return ListView.builder(
-                    padding: const EdgeInsets.only(top: 8),
                     itemCount: reports.length,
                     itemBuilder: (context, index) {
                       final report = reports[index];
                       final data = report.data() as Map<String, dynamic>;
 
-                      final timestamp = data['timestamp'] as Timestamp?;
+                      final timestamp = data["timestamp"] as Timestamp?;
                       final dateString = timestamp != null
-                          ? DateFormat('yyyy-MM-dd HH:mm:ss')
-                          .format(timestamp.toDate().toLocal())
-                          : "Unknown Date";
-
-                      final status = data['status'] ?? "pending";
+                          ? DateFormat("yyyy-MM-dd HH:mm")
+                          .format(timestamp.toDate())
+                          : "--";
 
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 8),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        elevation: 4,
-                        shadowColor: Colors.grey.withOpacity(0.3),
+                        elevation: 3,
                         child: Padding(
                           padding: const EdgeInsets.all(12.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Document ID
-                              Text(
-                                "Report ID: ${report.id}",
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                    color: Colors.grey),
-                              ),
-                              const SizedBox(height: 4),
-
-                              // Status badge
+                              /// TOP ROW - STATUS + DATE
                               Row(
+                                mainAxisAlignment:
+                                MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text("Status: "),
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
+                                        horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: _statusColor(status).withOpacity(0.2),
+                                      color: _statusColor(
+                                          data["status"] ?? "pending")
+                                          .withOpacity(0.2),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text(
-                                      status,
+                                      data["status"] ?? "pending",
                                       style: TextStyle(
-                                          color: _statusColor(status),
+                                          color: _statusColor(
+                                              data["status"] ?? "pending"),
                                           fontWeight: FontWeight.bold),
                                     ),
                                   ),
-                                  const Spacer(),
                                   Text(
                                     dateString,
                                     style: const TextStyle(
@@ -161,28 +205,50 @@ class _AnalystDashboardState extends State<AnalystDashboard> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
 
-                              // Analysis
+                              const SizedBox(height: 10),
+
+                              /// MAIN DETAILS
                               Text(
-                                "Analysis: ${data['analysis'] ?? 'N/A'}",
+                                "Analysis: ${data["analysis"]}",
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 16),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(height: 4),
-
-                              // Contamination Level
                               Text(
-                                  "Contamination: ${data['contaminationLevel'] ?? 'N/A'}"),
+                                  "Contamination Level: ${data["contaminationLevel"]}"),
                               const SizedBox(height: 4),
-
-                              // Location
                               Text(
-                                  "Location: Lat ${data['latitude'] ?? 'N/A'}, Lng ${data['longitude'] ?? 'N/A'}"),
+                                  "Location: Lat ${data["latitude"]}, Lng ${data["longitude"]}"),
                               const SizedBox(height: 4),
+                              Text("Notes: ${data["notes"]}"),
 
-                              // Notes
-                              Text("Notes: ${data['notes'] ?? 'N/A'}"),
+                              const SizedBox(height: 12),
+
+                              /// ACTION BUTTONS
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  /// EDIT
+                                  IconButton(
+                                    icon: const Icon(Icons.edit,
+                                        color: Colors.blue),
+                                    onPressed: () => _editNotesDialog(
+                                      report.id,
+                                      data["notes"] ?? "",
+                                    ),
+                                  ),
+
+                                  /// DELETE
+                                  IconButton(
+                                    icon: const Icon(Icons.delete,
+                                        color: Colors.red),
+                                    onPressed: () =>
+                                        _deleteReport(report.id),
+                                  ),
+                                ],
+                              )
                             ],
                           ),
                         ),
@@ -195,37 +261,23 @@ class _AnalystDashboardState extends State<AnalystDashboard> {
           ],
         ),
       ),
-      bottomNavigationBar: BottomAppBar(
-        color: Colors.blueGrey.shade50,
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 6.0,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.add_chart, color: Colors.blueAccent),
-              onPressed: () {
-                Navigator.pushNamed(context, "/create_report");
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.person, color: Colors.blueAccent),
-              onPressed: () {
-                Navigator.pushNamed(context, "/analyst"); // New middle button
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.home, color: Colors.blueAccent),
-              onPressed: () {
-                Navigator.pushReplacementNamed(context, "/home");
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.logout, color: Colors.redAccent),
-              onPressed: _logout,
-            ),
-          ],
-        ),
+
+      bottomNavigationBar: BottomNavigationBar(
+        selectedItemColor: Colors.blueAccent,
+        unselectedItemColor: Colors.grey,
+        onTap: (i) {
+          if (i == 0) Navigator.pushNamed(context, "/create_report");
+          if (i == 1) Navigator.pushReplacementNamed(context, "/home");
+          if (i == 2) _logout();
+        },
+        items: const [
+          BottomNavigationBarItem(
+              icon: Icon(Icons.add), label: "Create Report"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.home), label: "Home"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.logout), label: "Logout"),
+        ],
       ),
     );
   }

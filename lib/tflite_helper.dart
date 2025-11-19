@@ -5,50 +5,66 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 class WaterQualityModel {
   late Interpreter _interpreter;
 
-  /// Async factory constructor to initialize interpreter
+  /// Create model instance and load TFLite from assets
   static Future<WaterQualityModel> create() async {
     final model = WaterQualityModel._();
+
+    // IMPORTANT: only filename, NOT "assets/..."
     model._interpreter = await Interpreter.fromAsset('assets/water_model.tflite');
+
+    print("✅ MODEL LOADED SUCCESSFULLY");
     return model;
   }
 
-  // Private constructor
   WaterQualityModel._();
 
-  /// Predicts class probabilities for an image
+  /// Predict raw probabilities
   List<double> predict(String imagePath) {
-    // Load and resize image
     final bytes = File(imagePath).readAsBytesSync();
     img.Image? image = img.decodeImage(bytes);
+
     if (image == null) {
-      throw Exception("Could not decode image at $imagePath");
+      throw Exception("❌ Could not decode image at $imagePath");
     }
+
+    // Resize to model input size
     image = img.copyResize(image, width: 224, height: 224);
 
-    // Convert image to 4D tensor [1, 224, 224, 3]
-    var input = List.generate(1, (_) => List.generate(224, (i) => List.generate(224, (j) {
-      final pixel = image!.getPixel(j, i); // Pixel object
-      return [
-        pixel.r / 255.0, // R
-        pixel.g / 255.0, // G
-        pixel.b / 255.0, // B
-      ];
-    })));
+    // Build 4D input tensor
+    final input = List.generate(
+      1,
+          (_) => List.generate(
+        224,
+            (y) => List.generate(
+          224,
+              (x) {
+            final pixel = image!.getPixel(x, y);
+            return [
+              pixel.r / 255.0,
+              pixel.g / 255.0,
+              pixel.b / 255.0,
+            ];
+          },
+        ),
+      ),
+    );
 
-    // Output tensor [1, 3]
-    var output = List.filled(1 * 3, 0.0).reshape([1, 3]);
+    // Output shape [1,3]
+    var output = List.filled(3, 0.0).reshape([1, 3]);
 
-    // Run inference
     _interpreter.run(input, output);
 
     return List<double>.from(output[0]);
   }
 
-  /// Returns predicted class name
+  /// Predict class name
   String predictClass(String imagePath) {
-    final probabilities = predict(imagePath);
-    final classNames = ['safe', 'moderate', 'unsafe'];
-    final maxIndex = probabilities.indexOf(probabilities.reduce((a, b) => a > b ? a : b));
-    return classNames[maxIndex];
+    final p = predict(imagePath);
+
+    final labels = ["safe", "moderate", "unsafe"];
+
+    final maxIndex = p.indexOf(p.reduce((a, b) => a > b ? a : b));
+
+    return labels[maxIndex];
   }
 }

@@ -4,8 +4,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
-import 'package:image/image.dart' as img;
-import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:geolocator/geolocator.dart';
+
+import '../tflite_helper.dart';
 
 class CreateReportPage extends StatefulWidget {
   const CreateReportPage({super.key});
@@ -16,20 +19,20 @@ class CreateReportPage extends StatefulWidget {
 
 class _CreateReportPageState extends State<CreateReportPage> {
   File? _selectedImage;
+  File? _localImageCopy;
   bool _isLoading = false;
 
-  Interpreter? _interpreter;
+  WaterQualityModel? _model;
   bool _modelLoaded = false;
 
-  final List<String> _labels = [
+  final List<String> labels = [
     "Safe Water",
     "Moderately Contaminated",
-    "Highly Contaminated"
+    "Highly Contaminated",
   ];
 
   String? _analysis;
-  String? _contaminationLevel;
-
+  String? _contamination;
   String? _selectedSource;
 
   final TextEditingController _notesController = TextEditingController();
@@ -37,248 +40,260 @@ class _CreateReportPageState extends State<CreateReportPage> {
   final TextEditingController _latitudeController = TextEditingController();
   final TextEditingController _longitudeController = TextEditingController();
 
-  // ==========================
-  // LOAD MODEL
-  // ==========================
-  Future<void> _loadModel() async {
-    try {
-      _interpreter = await Interpreter.fromAsset("water_model.tflite");
-      setState(() => _modelLoaded = true);
-      print("MODEL LOADED SUCCESSFULLY");
-    } catch (e) {
-      print("ERROR LOADING MODEL: $e");
-    }
-  }
-
   @override
   void initState() {
     super.initState();
     _loadModel();
+    _requestLocationPermission();
+    _getLocation(); // AUTO LOCATION FETCH
   }
 
-  // ==========================
-  // PICK IMAGE
-  // ==========================
-  Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: source);
+  // Load Model
+  Future<void> _loadModel() async {
+    _model = await WaterQualityModel.create();
+    setState(() => _modelLoaded = true);
+    print("MODEL READY");
+  }
 
-    if (picked != null) {
-      setState(() => _selectedImage = File(picked.path));
-      await _runTFLiteModel();
+  // Request Permission
+  Future<void> _requestLocationPermission() async {
+    await Geolocator.requestPermission();
+  }
+
+  // Get Location
+  Future<void> _getLocation() async {
+    try {
+      bool enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) {
+        print("❌ Location OFF — Opening Settings");
+        await Geolocator.openLocationSettings();
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.deniedForever) {
+        print("❌ Location Permanently Denied");
+        return;
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      _latitudeController.text = pos.latitude.toString();
+      _longitudeController.text = pos.longitude.toString();
+
+      print("📍 LOCATION FETCHED = ${pos.latitude}, ${pos.longitude}");
+
+      setState(() {});
+
+    } catch (e) {
+      print("LOCATION ERROR: $e");
     }
   }
 
-  // ==========================
-  // URL IMAGE
-  // ==========================
+  // Copy file to temp folder
+  Future<File> _copyToLocalDirectory(File original) async {
+    final dir = await getTemporaryDirectory();
+    final newFile = File("${dir.path}/${DateTime.now().millisecondsSinceEpoch}.jpg");
+    print("📁 SAVING LOCAL COPY → ${newFile.path}");
+    return await original.copy(newFile.path);
+  }
+
+  // Pick Image
+  Future<void> _pickImage(ImageSource source) async {
+    final picked = await ImagePicker().pickImage(source: source);
+    if (picked != null) {
+      _selectedImage = File(picked.path);
+      _localImageCopy = await _copyToLocalDirectory(_selectedImage!);
+
+      await _runModel();
+      setState(() {});
+    }
+  }
+
+  // Load from URL
   Future<void> _processUrl(String url) async {
     try {
-      final response = await http.get(Uri.parse(url));
-
-      if (response.statusCode == 200) {
+      final res = await http.get(Uri.parse(url));
+      if (res.statusCode == 200) {
         final temp = File(
             "${Directory.systemTemp.path}/${DateTime.now().millisecondsSinceEpoch}.jpg");
-        await temp.writeAsBytes(response.bodyBytes);
 
-        setState(() => _selectedImage = temp);
-        await _runTFLiteModel();
+        await temp.writeAsBytes(res.bodyBytes);
+
+        _selectedImage = temp;
+        _localImageCopy = await _copyToLocalDirectory(temp);
+
+        await _runModel();
+        setState(() {});
       }
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("URL Error: $e")));
+      print("URL ERROR: $e");
     }
   }
 
-  // ==========================
-  // RUN MODEL
-  // ==========================
-  Future<void> _runTFLiteModel() async {
-    if (!_modelLoaded || _selectedImage == null) return;
-
-    try {
-      final bytes = await _selectedImage!.readAsBytes();
-      img.Image? decoded = img.decodeImage(bytes);
-
-      if (decoded == null) return;
-
-      img.Image resized = img.copyResize(decoded, width: 224, height: 224);
-
-      List<List<List<List<double>>>> input = [
-        List.generate(
-          224,
-              (y) => List.generate(
-            224,
-                (x) {
-              final p = resized.getPixel(x, y);
-
-              // FIXED PIXEL EXTRACTION
-              final r = img.Pixel.r(p);
-              final g = img.Pixel.g(p);
-              final b = img.Pixel.b(p);
-
-              return [
-                r / 255.0,
-                g / 255.0,
-                b / 255.0,
-              ];
-            },
-          ),
-        ),
-      ];
-
-      List<List<double>> output = [
-        [0.0, 0.0, 0.0]
-      ];
-
-      _interpreter!.run(input, output);
-
-      double highest = -1;
-      int index = 0;
-
-      for (int i = 0; i < output[0].length; i++) {
-        if (output[0][i] > highest) {
-          highest = output[0][i];
-          index = i;
-        }
-      }
-
-      setState(() {
-        _analysis = _labels[index];
-        _contaminationLevel = _labels[index];
-      });
-
-    } catch (e) {
-      print("PREDICTION ERROR: $e");
-    }
-  }
-
-  // ==========================
-  // SUBMIT REPORT
-  // ==========================
-  Future<void> _submitReport() async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("You must be logged in")));
+  // Run TFLite Model
+  Future<void> _runModel() async {
+    if (!_modelLoaded || _localImageCopy == null) {
+      print("❌ MODEL NOT READY OR IMAGE NULL");
       return;
     }
 
+    final result = _model!.predictClass(_localImageCopy!.path);
+
+    if (result == "safe") {
+      _analysis = labels[0];
+      _contamination = labels[0];
+    } else if (result == "moderate") {
+      _analysis = labels[1];
+      _contamination = labels[1];
+    } else {
+      _analysis = labels[2];
+      _contamination = labels[2];
+    }
+
+    print("🔍 FINAL PREDICTION = $_analysis");
+  }
+
+  // Upload Image
+  Future<String?> _uploadImage() async {
+    if (_localImageCopy == null) {
+      print("❌ No local image to upload");
+      return null;
+    }
+
+    try {
+      final ref = FirebaseStorage.instance.ref(
+          "ReportImages/${DateTime.now().millisecondsSinceEpoch}.jpg");
+
+      print("⬆ Uploading to: ${ref.fullPath}");
+      print("📄 Local Exists: ${_localImageCopy!.existsSync()}");
+
+      await ref.putFile(_localImageCopy!);
+
+      String url = await ref.getDownloadURL();
+      print("✅ UPLOADED → $url");
+      return url;
+
+    } catch (e) {
+      print("❌ IMAGE UPLOAD ERROR: $e");
+      return null;
+    }
+  }
+
+  // Save Report
+  Future<void> _submitReport() async {
+    final user = FirebaseAuth.instance.currentUser;
+
     if (_analysis == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Analyze image first")));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Analyze image first")));
       return;
     }
 
     setState(() => _isLoading = true);
 
-    try {
-      await FirebaseFirestore.instance.collection("Reports").add({
-        "userId": user.uid,
-        "email": user.email,
-        "analysis": _analysis,
-        "contaminationLevel": _contaminationLevel,
-        "latitude": _latitudeController.text,
-        "longitude": _longitudeController.text,
-        "notes": _notesController.text,
-        "timestamp": FieldValue.serverTimestamp(),
-        "status": "pending",
-      });
+    String? imgUrl = await _uploadImage();
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Report Submitted")));
-    } catch (e) {
-      print("Firestore Error: $e");
-    }
+    await FirebaseFirestore.instance.collection("Reports").add({
+      "userId": user!.uid,
+      "email": user.email,
+      "analysis": _analysis,
+      "contaminationLevel": _contamination,
+      "latitude": _latitudeController.text,
+      "longitude": _longitudeController.text,
+      "notes": _notesController.text,
+      "imageURL": imgUrl,
+      "timestamp": FieldValue.serverTimestamp(),
+      "status": "pending",
+    });
 
     setState(() => _isLoading = false);
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text("Report Submitted")));
   }
 
-  // ==========================
-  // UI
-  // ==========================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Create Report"), backgroundColor: Colors.blue),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              DropdownButtonFormField<String>(
-                value: _selectedSource,
-                decoration: const InputDecoration(
-                    labelText: "Select Source", border: OutlineInputBorder()),
-                items: ["Camera", "Gallery", "URL"]
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedSource = v),
+      appBar: AppBar(title: const Text("Create Report")),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            DropdownButtonFormField<String>(
+              value: _selectedSource,
+              items: ["Camera", "Gallery", "URL"]
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .toList(),
+              onChanged: (v) => setState(() => _selectedSource = v),
+              decoration: const InputDecoration(labelText: "Select Source"),
+            ),
+
+            const SizedBox(height: 16),
+
+            if (_selectedSource == "Camera" || _selectedSource == "Gallery")
+              ElevatedButton(
+                onPressed: () => _pickImage(
+                    _selectedSource == "Camera"
+                        ? ImageSource.camera
+                        : ImageSource.gallery),
+                child: Text(
+                    _selectedSource == "Camera" ? "Capture Image" : "Upload Image"),
               ),
 
-              const SizedBox(height: 16),
-
-              if (_selectedSource == "Camera" || _selectedSource == "Gallery")
-                ElevatedButton.icon(
-                  onPressed: () => _pickImage(
-                      _selectedSource == "Camera"
-                          ? ImageSource.camera
-                          : ImageSource.gallery),
-                  icon: const Icon(Icons.camera_alt),
-                  label: Text(_selectedSource == "Camera"
-                      ? "Capture Image"
-                      : "Upload Image"),
-                ),
-
-              if (_selectedSource == "URL")
-                TextField(
-                  controller: _urlController,
-                  decoration: const InputDecoration(
-                      labelText: "Paste Image URL", border: OutlineInputBorder()),
-                ),
-
-              const SizedBox(height: 16),
-
-              if (_selectedImage != null)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.file(_selectedImage!, height: 200),
-                ),
-
-              const SizedBox(height: 16),
-
-              if (_analysis != null)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("Analysis: $_analysis",
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
-                    Text("Contamination: $_contaminationLevel"),
-                  ],
-                ),
-
-              const SizedBox(height: 16),
-
+            if (_selectedSource == "URL") ...[
               TextField(
-                controller: _notesController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                    labelText: "Notes", border: OutlineInputBorder()),
+                controller: _urlController,
+                decoration:
+                const InputDecoration(labelText: "Paste Image URL"),
               ),
-
-              const SizedBox(height: 20),
-
-              _isLoading
-                  ? const CircularProgressIndicator()
-                  : ElevatedButton.icon(
-                onPressed: _submitReport,
-                icon: const Icon(Icons.send),
-                label: const Text("Submit Report"),
-              ),
+              ElevatedButton(
+                  onPressed: () =>
+                      _processUrl(_urlController.text.trim()),
+                  child: const Text("Load Image")),
             ],
-          ),
+
+            if (_localImageCopy != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Image.file(_localImageCopy!, height: 220),
+              ),
+
+            if (_analysis != null)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Analysis: $_analysis",
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text("Contamination: $_contamination"),
+                ],
+              ),
+
+            const SizedBox(height: 20),
+
+            TextField(
+              controller: _notesController,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: "Notes"),
+            ),
+
+            const SizedBox(height: 20),
+
+            _isLoading
+                ? const CircularProgressIndicator()
+                : ElevatedButton.icon(
+              onPressed: _submitReport,
+              icon: const Icon(Icons.send),
+              label: const Text("Submit Report"),
+            ),
+          ],
         ),
       ),
     );
