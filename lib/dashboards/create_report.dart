@@ -1,10 +1,10 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -45,39 +45,33 @@ class _CreateReportPageState extends State<CreateReportPage> {
     super.initState();
     _loadModel();
     _requestLocationPermission();
-    _getLocation(); // AUTO LOCATION FETCH
   }
 
-  // Load Model
+  // LOAD MODEL
   Future<void> _loadModel() async {
     _model = await WaterQualityModel.create();
     setState(() => _modelLoaded = true);
-    print("MODEL READY");
   }
 
-  // Request Permission
+  // PERMISSION ONLY
   Future<void> _requestLocationPermission() async {
     await Geolocator.requestPermission();
   }
 
-  // Get Location
+  // GET LOCATION
   Future<void> _getLocation() async {
     try {
       bool enabled = await Geolocator.isLocationServiceEnabled();
       if (!enabled) {
-        print("❌ Location OFF — Opening Settings");
         await Geolocator.openLocationSettings();
         return;
       }
 
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.deniedForever) {
-        print("❌ Location Permanently Denied");
-        return;
-      }
+      if (perm == LocationPermission.deniedForever) return;
 
       final pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
@@ -85,37 +79,37 @@ class _CreateReportPageState extends State<CreateReportPage> {
 
       _latitudeController.text = pos.latitude.toString();
       _longitudeController.text = pos.longitude.toString();
-
-      print("📍 LOCATION FETCHED = ${pos.latitude}, ${pos.longitude}");
-
       setState(() {});
-
     } catch (e) {
-      print("LOCATION ERROR: $e");
+      print("Location error: $e");
     }
   }
 
-  // Copy file to temp folder
+  // COPY IMAGE TO TEMP
   Future<File> _copyToLocalDirectory(File original) async {
     final dir = await getTemporaryDirectory();
     final newFile = File("${dir.path}/${DateTime.now().millisecondsSinceEpoch}.jpg");
-    print("📁 SAVING LOCAL COPY → ${newFile.path}");
     return await original.copy(newFile.path);
   }
 
-  // Pick Image
   Future<void> _pickImage(ImageSource source) async {
-    final picked = await ImagePicker().pickImage(source: source);
-    if (picked != null) {
+    try {
+      final picked = await ImagePicker().pickImage(source: source);
+      if (picked == null) return;
+
       _selectedImage = File(picked.path);
       _localImageCopy = await _copyToLocalDirectory(_selectedImage!);
 
+      await _getLocation();
       await _runModel();
+
       setState(() {});
+    } catch (e) {
+      print("Image pick error: $e");
     }
   }
 
-  // Load from URL
+  // PROCESS URL IMAGE
   Future<void> _processUrl(String url) async {
     try {
       final res = await http.get(Uri.parse(url));
@@ -128,20 +122,18 @@ class _CreateReportPageState extends State<CreateReportPage> {
         _selectedImage = temp;
         _localImageCopy = await _copyToLocalDirectory(temp);
 
+        await _getLocation();
         await _runModel();
         setState(() {});
       }
     } catch (e) {
-      print("URL ERROR: $e");
+      print("URL error: $e");
     }
   }
 
-  // Run TFLite Model
+  // AI PREDICTION
   Future<void> _runModel() async {
-    if (!_modelLoaded || _localImageCopy == null) {
-      print("❌ MODEL NOT READY OR IMAGE NULL");
-      return;
-    }
+    if (!_modelLoaded || _localImageCopy == null) return;
 
     final result = _model!.predictClass(_localImageCopy!.path);
 
@@ -156,48 +148,48 @@ class _CreateReportPageState extends State<CreateReportPage> {
       _contamination = labels[2];
     }
 
-    print("🔍 FINAL PREDICTION = $_analysis");
+    setState(() {});
   }
 
-  // Upload Image
-  Future<String?> _uploadImage() async {
-    if (_localImageCopy == null) {
-      print("❌ No local image to upload");
-      return null;
-    }
-
+  // Convert image to Base64 and return string
+  Future<String?> _convertImageToBase64() async {
+    if (_localImageCopy == null) return null;
     try {
-      final ref = FirebaseStorage.instance.ref(
-          "ReportImages/${DateTime.now().millisecondsSinceEpoch}.jpg");
-
-      print("⬆ Uploading to: ${ref.fullPath}");
-      print("📄 Local Exists: ${_localImageCopy!.existsSync()}");
-
-      await ref.putFile(_localImageCopy!);
-
-      String url = await ref.getDownloadURL();
-      print("✅ UPLOADED → $url");
-      return url;
-
+      final bytes = await _localImageCopy!.readAsBytes();
+      return base64Encode(bytes);
     } catch (e) {
-      print("❌ IMAGE UPLOAD ERROR: $e");
+      print("Base64 error: $e");
       return null;
     }
   }
 
-  // Save Report
+  // RESET FORM
+  void _resetForm() {
+    _notesController.clear();
+    _urlController.clear();
+    _latitudeController.clear();
+    _longitudeController.clear();
+    _selectedImage = null;
+    _localImageCopy = null;
+    _analysis = null;
+    _contamination = null;
+    _selectedSource = null;
+    setState(() {});
+  }
+
+  // SUBMIT REPORT
   Future<void> _submitReport() async {
     final user = FirebaseAuth.instance.currentUser;
 
-    if (_analysis == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Analyze image first")));
+    if (!canSubmit) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("Complete all steps first")));
       return;
     }
 
     setState(() => _isLoading = true);
 
-    String? imgUrl = await _uploadImage();
+    String? base64Image = await _convertImageToBase64();
 
     await FirebaseFirestore.instance.collection("Reports").add({
       "userId": user!.uid,
@@ -207,15 +199,27 @@ class _CreateReportPageState extends State<CreateReportPage> {
       "latitude": _latitudeController.text,
       "longitude": _longitudeController.text,
       "notes": _notesController.text,
-      "imageURL": imgUrl,
+      "imageBase64": base64Image, // STORED HERE
       "timestamp": FieldValue.serverTimestamp(),
       "status": "pending",
     });
 
     setState(() => _isLoading = false);
 
+    _resetForm();
+
+    Navigator.pushReplacementNamed(context, "/analyst");
+
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text("Report Submitted")));
+  }
+
+  // ALLOW SUBMIT?
+  bool get canSubmit {
+    return _analysis != null &&
+        _localImageCopy != null &&
+        _latitudeController.text.isNotEmpty &&
+        _longitudeController.text.isNotEmpty;
   }
 
   @override
@@ -243,20 +247,20 @@ class _CreateReportPageState extends State<CreateReportPage> {
                     _selectedSource == "Camera"
                         ? ImageSource.camera
                         : ImageSource.gallery),
-                child: Text(
-                    _selectedSource == "Camera" ? "Capture Image" : "Upload Image"),
+                child: Text(_selectedSource == "Camera"
+                    ? "Capture Image"
+                    : "Upload Image"),
               ),
 
             if (_selectedSource == "URL") ...[
               TextField(
                 controller: _urlController,
-                decoration:
-                const InputDecoration(labelText: "Paste Image URL"),
+                decoration: const InputDecoration(labelText: "Paste Image URL"),
               ),
               ElevatedButton(
-                  onPressed: () =>
-                      _processUrl(_urlController.text.trim()),
-                  child: const Text("Load Image")),
+                onPressed: () => _processUrl(_urlController.text.trim()),
+                child: const Text("Load Image"),
+              ),
             ],
 
             if (_localImageCopy != null)
@@ -289,7 +293,7 @@ class _CreateReportPageState extends State<CreateReportPage> {
             _isLoading
                 ? const CircularProgressIndicator()
                 : ElevatedButton.icon(
-              onPressed: _submitReport,
+              onPressed: canSubmit ? _submitReport : null,
               icon: const Icon(Icons.send),
               label: const Text("Submit Report"),
             ),

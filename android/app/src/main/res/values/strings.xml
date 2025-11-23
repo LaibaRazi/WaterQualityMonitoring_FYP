@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">waterqualitymonitoring</string>
+
+    <!-- Google Sign-In Web Client ID -->
+    <string name="default_web_client_id">
+        943850444661-ujlvbjbja3v62t5u5v3t11l167e25n7c.apps.googleusercontent.com
+    </string>
+</resources>

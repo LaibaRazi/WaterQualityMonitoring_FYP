@@ -17,11 +17,13 @@ dependencies:
   firebase_auth: ^5.7.0
   cloud_firestore: ^5.4.4
   firebase_storage: ^12.4.10
-  path_provider: ^2.1.2
 
+  # Google Sign In (⭐ REQUIRED)
+  google_sign_in: ^6.2.1
 
   # Utils
   geolocator: ^13.0.1
+  path_provider: ^2.1.2
 
   # For image picking and processing
   image_picker: ^0.8.7+4
@@ -39,4 +41,5 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-   - assets/water_model.tflite
+    - assets/water_model.tflite
+    - assets/google.png

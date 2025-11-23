@@ -12,8 +12,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String? role;
   String? email;
-  String? name;
-  String? gender;
+  String? fullName;
 
   @override
   void initState() {
@@ -21,7 +20,7 @@ class _HomePageState extends State<HomePage> {
     _getUserData();
   }
 
-  /// Fetch role from Users collection & profile from infouser
+  /// Fetch user data from Users collection
   Future<void> _getUserData() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -32,82 +31,69 @@ class _HomePageState extends State<HomePage> {
     if (userDoc.exists) {
       role = userDoc['role'];
       email = userDoc['email'];
-    }
-
-    final infoDoc =
-    await FirebaseFirestore.instance.collection("User").doc(uid).get();
-
-    if (infoDoc.exists) {
-      name = infoDoc['name'];
-      gender = infoDoc['gender'];
+      fullName = userDoc['fullName'];
     }
 
     setState(() {});
   }
 
+  /// LOGOUT
   Future<void> _logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
     Navigator.pushReplacementNamed(context, '/');
   }
 
+  /// EDIT PROFILE POPUP
   void _editProfile() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    final uid = FirebaseAuth.instance.currentUser!.uid;
 
-    String defaultName = name ?? (email != null ? email!.split("@")[0] : "");
     TextEditingController nameController =
-    TextEditingController(text: defaultName);
-    String selectedGender = gender ?? "Other";
+    TextEditingController(text: fullName ?? "");
 
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text("Edit Profile"),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          title:
+          Text("Edit Profile", style: TextStyle(fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              /// EMAIL (READ ONLY)
               TextField(
                 readOnly: true,
                 decoration: InputDecoration(
                   labelText: "Email",
                   hintText: email,
+                  prefixIcon: Icon(Icons.email),
+                  border: OutlineInputBorder(),
                 ),
               ),
+              SizedBox(height: 10),
+
+              /// FULL NAME
               TextField(
                 controller: nameController,
-                decoration: InputDecoration(labelText: "Name"),
-              ),
-              DropdownButtonFormField<String>(
-                value: selectedGender,
-                items: ["Male", "Female", "Other"]
-                    .map((g) => DropdownMenuItem(
-                  value: g,
-                  child: Text(g),
-                ))
-                    .toList(),
-                onChanged: (val) {
-                  if (val != null) selectedGender = val;
-                },
-                decoration: InputDecoration(labelText: "Gender"),
+                decoration: InputDecoration(
+                  labelText: "Full Name",
+                  prefixIcon: Icon(Icons.person),
+                  border: OutlineInputBorder(),
+                ),
               ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text("Cancel"),
-            ),
+                onPressed: () => Navigator.pop(context), child: Text("Cancel")),
             ElevatedButton(
               onPressed: () async {
                 await FirebaseFirestore.instance
-                    .collection("User")
+                    .collection("Users")
                     .doc(uid)
-                    .set({
-                  "email": email,
-                  "name": nameController.text.trim(),
-                  "gender": selectedGender,
-                }, SetOptions(merge: true));
+                    .update({
+                  "fullName": nameController.text.trim(),
+                });
 
                 Navigator.pop(context);
                 _getUserData();
@@ -122,7 +108,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (role == null || email == null) {
+    if (role == null) {
       return Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
@@ -133,57 +119,98 @@ class _HomePageState extends State<HomePage> {
         title: Text("Dashboard"),
         backgroundColor: Colors.blueAccent,
         actions: [
-          IconButton(
-            icon: Icon(Icons.edit),
-            tooltip: "Edit Profile",
-            onPressed: _editProfile,
-          ),
+          if (role == "analyst")
+            IconButton(
+              icon: Icon(Icons.edit),
+              tooltip: "Edit Profile",
+              onPressed: _editProfile,
+            ),
         ],
       ),
+
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: role == "admin" ? _buildAdminScreen() : _buildAnalystScreen(),
+        child: role == "admin" ? _buildAdminScreen() : _buildFancyAnalystScreen(),
       ),
 
-      // --- Modern Bottom Navigation Bar ---
-      bottomNavigationBar: BottomAppBar(
-        color: Colors.blueGrey.shade50,
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 6.0,
-        elevation: 6,
+      // ANALYST NAV BAR
+      bottomNavigationBar: role == "analyst"
+          ? BottomNavigationBar(
+        currentIndex: 1,
+        selectedItemColor: Colors.blueAccent,
+        unselectedItemColor: Colors.grey,
+        onTap: (i) {
+          if (i == 0) Navigator.pushNamed(context, "/create_report");
+          if (i == 1)
+            Navigator.pushReplacementNamed(context, "/analyst");
+          if (i == 2) _logout(context);
+        },
+        items: const [
+          BottomNavigationBarItem(
+              icon: Icon(Icons.add_chart), label: "Create Report"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.list_alt), label: "My Reports"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.logout), label: "Logout"),
+        ],
+      )
+          : null,
+    );
+  }
+
+  /// ⭐ BEAUTIFUL ANALYST PROFILE CARD
+  Widget _buildFancyAnalystScreen() {
+    return Center(
+      child: Card(
+        elevation: 8,
+        shadowColor: Colors.blueAccent.withOpacity(0.4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Left button - Create Report
-              IconButton(
-                icon: const Icon(Icons.add_chart, color: Colors.blueAccent),
-                onPressed: () {
-                  Navigator.pushNamed(context, "/create_report");
-                },
+              /// PROFILE IMAGE
+              CircleAvatar(
+                radius: 45,
+                backgroundColor: Colors.blueAccent,
+                child: Icon(Icons.person, size: 50, color: Colors.white),
+              ),
+              SizedBox(height: 15),
+
+              /// FULL NAME
+              Text(
+                fullName ?? "No Name",
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
 
-              // Middle button - Analyst Dashboard
-              IconButton(
-                icon: const Icon(Icons.analytics, color: Colors.blueAccent),
-                onPressed: () {
-                  Navigator.pushReplacementNamed(context, "/analyst");
-                },
-              ),
+              SizedBox(height: 8),
 
-              // Right button - Home
-              IconButton(
-                icon: const Icon(Icons.home, color: Colors.blueAccent),
-                onPressed: () {
-                  Navigator.pushReplacementNamed(context, "/home");
-                },
-              ),
+              /// EMAIL
+              Text(email!,
+                  style: TextStyle(fontSize: 16, color: Colors.grey[700])),
 
-              // Right-most button - Logout
-              IconButton(
-                icon: const Icon(Icons.logout, color: Colors.redAccent),
-                onPressed: () => _logout(context),
+              SizedBox(height: 20),
+
+              /// 🔵 HELP & SUPPORT BUTTON
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/help');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  icon: Icon(Icons.help_outline, color: Colors.white),
+                  label: Text(
+                    "Help & Support",
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                ),
               ),
             ],
           ),
@@ -192,81 +219,17 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildAnalystScreen() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.analytics_outlined, size: 70, color: Colors.blueAccent),
-        SizedBox(height: 20),
-        Text("Analyst Dashboard",
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-        SizedBox(height: 10),
-        Text("Welcome, $email",
-            style: TextStyle(fontSize: 16, color: Colors.grey[700])),
-        if (name != null) Text("Name: $name"),
-        if (gender != null) Text("Gender: $gender"),
-      ],
-    );
-  }
-
+  /// ADMIN SCREEN
   Widget _buildAdminScreen() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text("Admin Dashboard",
             style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-        SizedBox(height: 10),
+        SizedBox(height: 15),
         Text("Logged in as: $email",
             style: TextStyle(fontSize: 16, color: Colors.grey[700])),
-        if (name != null) Text("Name: $name"),
-        if (gender != null) Text("Gender: $gender"),
-        SizedBox(height: 20),
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection("Users")
-                .where("role", isEqualTo: "analyst")
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return Center(child: CircularProgressIndicator());
-              }
-
-              final analysts = snapshot.data!.docs;
-
-              if (analysts.isEmpty) {
-                return Center(
-                    child: Text("No analysts registered yet.",
-                        style: TextStyle(color: Colors.grey, fontSize: 16)));
-              }
-
-              return ListView.builder(
-                itemCount: analysts.length,
-                itemBuilder: (context, index) {
-                  final analyst = analysts[index];
-                  return Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    elevation: 3,
-                    margin: EdgeInsets.symmetric(vertical: 8),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.blueAccent,
-                        child: Icon(Icons.person, color: Colors.white),
-                      ),
-                      title: Text(analyst['email'],
-                          style: TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text("Role: ${analyst['role']}",
-                          style: TextStyle(color: Colors.black54)),
-                    ),
-
-                  );
-                },
-              );
-            },
-          ),
-        ),
+        SizedBox(height: 15),
       ],
     );
   }

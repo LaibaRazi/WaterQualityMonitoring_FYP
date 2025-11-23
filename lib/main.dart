@@ -9,6 +9,7 @@ import 'dashboards/analyst_dashboard.dart';
 import 'dashboards/admin_dashboard.dart';
 import 'dashboards/create_report.dart';
 import 'dashboards/approve_report.dart';
+import 'dashboards/help_support_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -95,7 +96,8 @@ class MyApp extends StatelessWidget {
         '/admin': (context) => AdminDashboard(),
         '/create_report': (context) => CreateReportPage(),
         '/approve_report': (context) => ApproveReportPage(),
-      },
+        '/help':(context) => HelpSupportPage()
+    },
     );
   }
 }
